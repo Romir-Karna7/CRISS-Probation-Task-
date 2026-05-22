@@ -10,7 +10,7 @@ DEDUP_WINDOW_SEC = 0.2   # merging detections within this window, eill change if
 class MarkerAggregatorNode(Node):
     def __init__(self):
         super().__init__('marker_aggregator')
-        self._buffer: dict[int, tuple[float, Marker]] = {}  # id → (timestamp, marker)
+        self._buffer: dict[int, tuple[float, Marker]] = {}  # id is (timestamp, marker)
 
         for cam in CAMERAS:
             self.create_subscription(
