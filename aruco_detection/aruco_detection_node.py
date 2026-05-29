@@ -75,7 +75,7 @@ class ArucoDetectionNode(Node):
         
         self.get_logger().info(f"Camera: {camera}")
         self.get_logger().info(f"Marker Size: {marker_size}")
-        self.get_logger().info(f"Aruco Dictionary: {aruco_dict}")
+        self.get_logger().info(f"Aruco Dictionary: {aruco_dict_name}")
 
         self.marker_size = marker_size
         self.bridge = CvBridge()
