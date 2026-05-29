@@ -96,9 +96,9 @@ class ArucoDetectionNode(Node):
 
         
         # Set up subsscriptions to camera image and info topics 
-        img_topic  = self.get_parameter('image_topic').value
+        img_topic = self.get_parameter('image_topic').value
         info_topic = self.get_parameter('camera_info_topic').value
-        self.image_sub  = self.create_subscription(Image, img_topic, self.image_cb, 10)
+        self.image_sub = self.create_subscription(Image, img_topic, self.image_cb, 10)
         self.info_sub = self.create_subscription(CameraInfo, info_topic, self.info_cb, 10)
 
         # set up publisher
@@ -110,14 +110,14 @@ class ArucoDetectionNode(Node):
     def info_cb(self, msg: CameraInfo):
         if self.camera_matrix is None:
             self.camera_matrix = np.array(msg.k).reshape(3, 3)
-            self.dist_coeffs   = np.array(msg.d)
+            self.dist_coeffs = np.array(msg.d)
 
     def image_cb(self, msg: Image):
         if self.camera_matrix is None:
-            return  # wait for calibration
+            return    # wait for calibration
 
         frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
-        gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         corners, ids, _ = self.detector.detectMarkers(gray)
         if ids is None:
@@ -130,8 +130,8 @@ class ArucoDetectionNode(Node):
         marker_length = self.marker_size
         half_len = marker_length / 2.0
         object_points = np.array([
-            [-half_len,  half_len, 0],
-            [ half_len,  half_len, 0],
+            [-half_len, half_len, 0],
+            [ half_len, half_len, 0],
             [ half_len, -half_len, 0],
             [-half_len, -half_len, 0]
         ], dtype=np.float32)
