@@ -126,29 +126,31 @@ class ArucoDetectionNode(Node):
         out = MarkerArray()
         out.header = msg.header
 
-        rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-            corners,
-            self.marker_size,
-            self.camera_matrix, 
-            self.dist_coeffs
-        )
 
+        marker_length = self.marker_size
+        half_len = marker_length / 2.0
+        object_points = np.array([
+            [-half_len,  half_len, 0],
+            [ half_len,  half_len, 0],
+            [ half_len, -half_len, 0],
+            [-half_len, -half_len, 0]
+        ], dtype=np.float32)
+        
         for i, marker_id in enumerate(ids.flatten()):
+            image_points = corners[i][0].astype(np.float32)
+            success, rvec, tvec = cv2.solvePnP(
+                object_points, image_points, self.camera_matrix, self.dist_coeffs
+            )
+            if not success:
+                continue
             m = Marker()
             m.header  = msg.header
             m.id      = int(marker_id)
-
-            tvec = tvecs[i][0]
-            rvec = rvecs[i][0]
-
-            # Store as PoseWithCovariance — translation only for now
             m.pose.pose.position.x = float(tvec[0])
             m.pose.pose.position.y = float(tvec[1])
             m.pose.pose.position.z = float(tvec[2])
-            # Convert rodrigues to quaternion
             rot_mat, _ = cv2.Rodrigues(rvec)
             m.pose.pose.orientation = self._rot_to_quat(rot_mat)
-
             out.markers.append(m)
 
         self.pub.publish(out)
