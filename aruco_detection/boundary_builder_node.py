@@ -5,6 +5,7 @@ from geometry_msgs.msg import PolygonStamped, Point32
 import tf2_ros
 import tf2_geometry_msgs
 from geometry_msgs.msg import PoseStamped
+import math
 
 class BoundaryBuilderNode(Node):
     def __init__(self):
@@ -46,22 +47,29 @@ class BoundaryBuilderNode(Node):
         if len(self.known_markers) < 3:
             return
 
-        # sorting by descending ID — highest ID is at the back of robot,
-        # then IDs decrease clockwise as given
-        ordered = sorted(self.known_markers.items(), key=lambda kv: -kv[0])
+        points = list(self.known_markers.values())
+        centroid_x = sum(x for x,_ in points)/len(points)
+        centroid_y = sum(y for _,y in points)/len(points)
+
+        def angle(point):
+            x,y = point
+            return math.atan2(y-centroid_y, x-centroid_x)
+
+        ordered_points = sorted(points, key=angle)
 
         poly = PolygonStamped()
-        poly.header.stamp    = self.get_clock().now().to_msg()
+        poly.header.stamp = self.get_clock().now().to_msg()
         poly.header.frame_id = self.map_frame
 
-        for _, (x, y) in ordered:
+        for x,y in ordered_points:
             p = Point32()
-            p.x, p.y = float(x), float(y)
+            p.x = float(x)
+            p.y = float(y)
             poly.polygon.points.append(p)
 
         self.pub.publish(poly)
-        self.get_logger().info(
-            f'Boundary polygon updated: {len(ordered)} markers', throttle_duration_sec=5.0)
+        self.get_logger().info(f"Boundary polygon updated: {len(ordered_points)} markers", throttle_duration_sec=5.0)
+
 
 
 def main():
