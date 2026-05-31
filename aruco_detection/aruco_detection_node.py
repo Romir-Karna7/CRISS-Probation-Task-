@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 TBD: Include node description and usage instructions here.
 Sources used:
@@ -79,7 +80,7 @@ class ArucoDetectionNode(Node):
 
         self.marker_size = marker_size
         self.bridge = CvBridge()
-        self.intrinsic_matrix = None   # intrinsic matrix
+        self.camera_matrix = None   # intrinsic matrix
         self.dist_coeffs = None   # distortion coefficients
         
         # Map of aruco dictionary names to OpenCV constants -- ADD MORE AS NEEDED, ALSO CHECK WHETHER AUTO-DETECTION IS NEEDED OR NOT
@@ -176,3 +177,9 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
+
+if __name__ == '__main__': # added as always
+    main()
+
+
