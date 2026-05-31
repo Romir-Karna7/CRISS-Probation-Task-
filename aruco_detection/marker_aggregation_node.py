@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from aruco_msgs.msg import MarkerArray, Marker
@@ -11,11 +12,13 @@ class MarkerAggregatorNode(Node):
     def __init__(self):
         super().__init__('marker_aggregator')
         self._buffer: dict[int, tuple[float, Marker]] = {}  # id is (timestamp, marker)
+        
 
         for cam in CAMERAS:
-            self.create_subscription(
-                MarkerArray, f'/aruco/markers/{cam}',
+            self.create_subscription( 
+                MarkerArray, f'/aruco/markers/{cam}', 
                 lambda msg, c=cam: self.marker_cb(msg, c), 10)
+            self.get_logger().info(f"Listening for detections on: /aruco/markers/{cam}")
 
         self.pub = self.create_publisher(
             MarkerArray, '/aruco/detected_markers', 10)
@@ -24,7 +27,7 @@ class MarkerAggregatorNode(Node):
         self.create_timer(0.1, self.flush)
 
     def marker_cb(self, msg: MarkerArray, camera: str):
-        now = time.time()
+        now = self.get_clock().now() # changed how to get time so that can match gazebo time
         for m in msg.markers:
             mid = m.id
             if mid not in self._buffer:
@@ -36,11 +39,13 @@ class MarkerAggregatorNode(Node):
                     self._buffer[mid] = (now, m)
 
     def flush(self):
-        now = time.time()
+        now = self.get_clock().now()
         out = MarkerArray()
         stale = []
-        for mid, (ts, m) in self._buffer.items():
-            if now - ts < DEDUP_WINDOW_SEC * 10:  # keeping for 2 secs
+        for mid, (ts, m) in list(self._buffer.items()):
+            time = (now - ts).nanoseconds / 1e9 # as the type of now - its a duration object so need to extract time from it 
+            if time < DEDUP_WINDOW_SEC: 
+            ## if now - ts < DEDUP_WINDOW_SEC * 10:  # keeping for 2 secs
                 out.markers.append(m)
             else:
                 stale.append(mid)
@@ -54,3 +59,6 @@ def main():
     rclpy.init()
     rclpy.spin(MarkerAggregatorNode())
     rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
