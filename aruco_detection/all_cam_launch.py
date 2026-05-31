@@ -56,7 +56,7 @@ def generate_launch_description():
     # 5. The Aggregator Node
     aggregator_node = Node(
         package='slam',
-        executable='marker_aggregation_node.py',  # Make sure this matches your aggregator filename!
+        executable='marker_aggregation_node.py',  
         name='marker_aggregator',
         parameters=[sim_time]
     )
