@@ -3,13 +3,13 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # Common parameters for all nodes
-    sim_time = {'use_sim_time': True}
+    sim_time = {'use_sim_time': True} # to ensure gazebo time is used when running
     
     # 1. Front Camera Detector
     front_detector = Node(
-        package='slam',
-        executable='aruco_detection_node.py',
-        name='aruco_detector_front',
+        package='slam', # to look inside slam package
+        executable='aruco_detection_node.py',# python script to run from inside slam package
+        name='aruco_detector_front', # node name in ros node list
         parameters=[sim_time, {
             'camera_name': 'front',
             'image_topic': '/front_cam/color/image_raw',
@@ -56,13 +56,13 @@ def generate_launch_description():
     # 5. The Aggregator Node
     aggregator_node = Node(
         package='slam',
-        executable='marker_aggregation_node.py',  
+        executable='marker_aggregation_node.py', 
         name='marker_aggregator',
         parameters=[sim_time]
     )
 
     # Launch all 5 nodes simultaneously
-    return LaunchDescription([
+    return LaunchDescription([ #packages all 5 nodes into an array return to ros2 to launch together
         front_detector,
         back_detector,
         left_detector,
