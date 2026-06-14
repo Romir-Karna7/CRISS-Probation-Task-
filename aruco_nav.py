@@ -53,7 +53,7 @@ class ArucoNavigation(Node):
         self.send_goal(target_marker)
 
     def send_goal(self, marker):
-        try:
+        try: #added to avoid error when TF2 math or network fails, which was happening when the robot was moving and the transform from camera to map was not available for a short time
             transform = self.tf_buffer.lookup_transform(
                 'map', 
                 marker.header.frame_id, 
