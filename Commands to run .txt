@@ -1,0 +1,19 @@
+
+
+0. ros2 launch husarion_ugv_gazebo simulation.launch.py - husarian simulation 
+1. ros2 launch slam slam_launch.py use_sim_time:=true - slam
+2. ros2 launch slam nav_launch.py use_sim_time:=true - nav
+
+3. ros2 run twist_stamper twist_stamper --ros-args -r cmd_vel_in:=cmd_vel_unstamped -r cmd_vel_out:=cmd_vel -p use_sim_time:=true - to run twist stamper
+4. ros2 launch slam all_cam_launch.py use_sim_time:=true 
+5. ros2 run slam aruco_nav.py use_sim_time:=true
+
+
+
+ros2 run rqt_gui rqt_gui - to run rqt where i can change properties of nodes
+
+ros2 launch explore_lite explore.launch.py use_sim_time:=true
+
+
+
+
