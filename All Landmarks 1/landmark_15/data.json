@@ -1,0 +1,16 @@
+{
+  "id": "landmark_15",
+  "timestamp": 705.21,
+  "camera": "front",
+  "source": "",
+  "class": "unknown",
+  "confidence": 1.0,
+  "frame": "map",
+  "position": {
+    "x": 19.475441123510254,
+    "y": 0.9747204465757444,
+    "z": -8.627692139943441
+  },
+  "vlm_description": "",
+  "vlm_mars_relation": ""
+}
