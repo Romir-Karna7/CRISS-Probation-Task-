@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 # --------------------------------------------------------------------------
 # LandmarkLocalizationNode
 #
-# Subscribes to:
+# subscribes to:
 #   /landmark_detections              (LandmarkDetection)
 #   /cam/depth/color/points           (PointCloud2)
 #
@@ -14,7 +13,7 @@
 #   5. deduplicates within DEDUP_DISTANCE_M metres
 #   6. publishes a LocalizedLandmark
 #
-# Publishes:
+# publishes:
 #   /localized_landmarks              (LocalizedLandmark)
 # --------------------------------------------------------------------------
 
@@ -30,11 +29,12 @@ import tf2_geometry_msgs
 
 import math
 import struct
-from mission_interfaces.msg import LandmarkDetection, LocalizedLandmark
+
+from mars_msgs.msg import LandmarkDetection
+from mars_msgs.msg import LocalizedLandmark
 
 DEDUP_DISTANCE_M = 1.0
 
-# change to 'odom' if testing
 TARGET_FRAME = "map"
 
 CAMERA_CONFIG = {
@@ -56,7 +56,7 @@ CAMERA_CONFIG = {
     },
 }
 
-POINT_STEP   = 16   # bytes per point (x=4, y=4, z=4 + 4 padding typical for realsense)
+POINT_STEP   = 16
 X_OFFSET     = 0
 Y_OFFSET     = 4
 Z_OFFSET     = 8
@@ -91,7 +91,6 @@ class LandmarkLocalizationNode(Node):
                 f"Subscribed to {config['pointcloud_topic']}"
             )
 
-        #SUBSCRIBE BLOCK
         self.create_subscription(
             LandmarkDetection,
             "/landmark_detections",
@@ -99,10 +98,10 @@ class LandmarkLocalizationNode(Node):
             10,
         )
 
-        #PUBLISH BLOCK
         self.pub = self.create_publisher(
             LocalizedLandmark, "/localized_landmarks", 10
         )
+
 
         self.get_logger().info(
             f"LandmarkLocalizationNode ready. "
@@ -139,7 +138,7 @@ class LandmarkLocalizationNode(Node):
             return
 
         point_in_cam = PointStamped()
-        point_in_cam.header.stamp    = cloud_msg.header.stamp
+        point_in_cam.header.stamp = rclpy.time.Time().to_msg()
         point_in_cam.header.frame_id = cloud_msg.header.frame_id  # depth optical frame
         point_in_cam.point           = centroid
 
@@ -172,20 +171,6 @@ class LandmarkLocalizationNode(Node):
             "z": final_pos.z,
         })
 
-        # TEST BLOCK
-        self.get_logger().info(
-            f"\n"
-            f"  [NEW LANDMARK #{len(self.known_landmarks)}]\n"
-            f"  camera    : {det.camera_name}\n"
-            f"  class     : {det.class_name}\n"
-            f"  confidence: {det.confidence:.2f}\n"
-            f"  frame     : {TARGET_FRAME}\n"
-            f"  position  : x={final_pos.x:.2f} y={final_pos.y:.2f} z={final_pos.z:.2f}\n"
-            f"  total known: {len(self.known_landmarks)}"
-        )
-        # END TEST BLOCK
-
-        # PUBLISH BLOCK
         loc = LocalizedLandmark()
         loc.camera_name  = det.camera_name
         loc.class_name   = det.class_name
