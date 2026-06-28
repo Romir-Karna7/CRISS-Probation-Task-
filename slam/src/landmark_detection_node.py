@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # --------------------------------------------------------------------------
 # LandmarkDetectionNode
 #
@@ -8,16 +7,16 @@
 #
 #   2. Background anomaly detector: builds a running average of what
 #      normal terrain looks like per camera. Flags any region that
-#      differs significantly from that average and is large enough to
-#      be a physical landmark
+#      differs significantly from that average, is large enough to
+#      be a physical landmark, AND has sufficient colour saturation
+#      to rule out grey/white terrain features and ArUco marker poles.
 #
-# Subscribes:
+# subscribes:
 #   /cam/color/image_raw          (sensor_msgs/Image)
 #   /cam/depth/image_rect_raw     (sensor_msgs/Image)
 #
-
-# Publishes:
-#   /landmark_detections          (LandmarkDetection)
+# publishes:
+#   /landmark_detections          (mars_msgs/LandmarkDetection)
 # --------------------------------------------------------------------------
 
 import rclpy
@@ -32,9 +31,9 @@ from cv_bridge import CvBridge
 import numpy as np
 from ultralytics import YOLOWorld
 import message_filters
-from mission_interfaces.msg import LandmarkDetection
 
-# tunable parameters
+from mars_msgs.msg import LandmarkDetection
+
 CONFIDENCE_THRESHOLD = 0.30
 YOLO_PROMPTS = [
     "equipment",
@@ -46,6 +45,7 @@ YOLO_PROMPTS = [
     "pole",
     "device",
 ]
+
 # min contour area in pixels for the anomaly detector
 # 1280x720 image = 921600 pixels total; 0.5% = 4600 pixels
 MIN_CONTOUR_AREA = 4600
@@ -54,12 +54,16 @@ BACKGROUND_LEARNING_RATE = 0.01
 
 ANOMALY_THRESHOLD = 40.0
 
+MIN_ANOMALY_SATURATION = 40
+MIN_SATURATED_PIXEL_FRACTION = 0.15
+
 CAMERAS = {
     "front": "/front_cam",
     "left":  "/left_cam",
     "rear":  "/rear_cam",
     "right": "/right_cam",
 }
+
 
 class LandmarkDetectionNode(Node):
     def __init__(self):
@@ -78,10 +82,8 @@ class LandmarkDetectionNode(Node):
             depth=1,
         )
 
-        # PUBLISH BLOCK
-        # PUBLISH BLOCK
         self.detection_pub = self.create_publisher(
-             LandmarkDetection, "/landmark_detections", 10
+            LandmarkDetection, "/landmark_detections", 10
         )
 
         for cam_name, topic_prefix in CAMERAS.items():
@@ -122,8 +124,8 @@ class LandmarkDetectionNode(Node):
             self.get_logger().error(f"[{cam_name}] cv_bridge error: {e}")
             return
 
-        yolo_detections     = self._run_yolo(color_frame)
-        anomaly_detections  = self._run_anomaly_detector(cam_name, color_frame)
+        yolo_detections    = self._run_yolo(color_frame)
+        anomaly_detections = self._run_anomaly_detector(cam_name, color_frame)
 
         all_detections = self._merge_detections(yolo_detections, anomaly_detections)
 
@@ -140,47 +142,24 @@ class LandmarkDetectionNode(Node):
             ]
             snapshot_msg = self.bridge.cv2_to_imgmsg(snapshot_crop, "bgr8")
 
-            # TEST BLOCK
-            self.get_logger().info(
-                f"\n"
-                f"  camera    : {cam_name}\n"
-                f"  source    : {source}\n"
-                f"  class     : unknown\n"
-                f"  bbox      : x={x1} y={y1} w={x2-x1} h={y2-y1}\n"
-                f"  depth     : {depth_m:.2f} m\n"
-                f"  position  : x={position_3d.x:.2f} y={position_3d.y:.2f} z={position_3d.z:.2f}"
-            )
-            # END TEST BLOCK
-
-            # PUBLISH BLOCK
-            # PUBLISH BLOCK
             det = LandmarkDetection()
-            det.stamp        = color_msg.header.stamp
             det.camera_name  = cam_name
-            det.class_name   = str(source) 
-            det.confidence   = 1.0          # Hardcoded since anomaly doesn't output a score
+            det.source       = source
+            det.class_name   = "unknown"
+            det.confidence   = float(1.0)      # anomaly has no score
             det.bbox_x       = float(x1)
             det.bbox_y       = float(y1)
             det.bbox_width   = float(x2 - x1)
             det.bbox_height  = float(y2 - y1)
-            det.depth_m      = float(depth_m if not np.isnan(depth_m) else 0.0) 
+            det.depth_m      = float(depth_m) if not np.isnan(depth_m) else -1.0
             det.position_3d  = position_3d
             det.snapshot     = snapshot_msg
-
+            det.stamp        = color_msg.header.stamp
             self.detection_pub.publish(det)
-            
-            # Prevent NaN depth values from crashing the message
-            det.depth_m      = float(depth_m if not np.isnan(depth_m) else 0.0) 
-            
-            det.position_3d  = position_3d
-            det.snapshot     = snapshot_msg
-
-            self.detection_pub.publish(det)              
 
     def _run_yolo(self, color_frame: np.ndarray) -> list:
         results = self.model(color_frame, verbose=False)
         detections = []
-
         for box in results[0].boxes:
             confidence = float(box.conf[0])
             if confidence < CONFIDENCE_THRESHOLD:
@@ -190,7 +169,6 @@ class LandmarkDetectionNode(Node):
         return detections
 
     def _run_anomaly_detector(self, cam_name: str, color_frame: np.ndarray) -> list:
-        # converts to grayscale (lf intensity diff)
         gray = cv2.cvtColor(color_frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
 
         if self.backgrounds[cam_name] is None:
@@ -210,6 +188,9 @@ class LandmarkDetectionNode(Node):
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        # precompute HSV once per frame
+        hsv_frame = cv2.cvtColor(color_frame, cv2.COLOR_BGR2HSV)
+
         detections = []
         for contour in contours:
             area = cv2.contourArea(contour)
@@ -217,12 +198,24 @@ class LandmarkDetectionNode(Node):
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)
+
+            roi_sat = hsv_frame[y:y+h, x:x+w, 1]
+            saturated_pixels = np.sum(roi_sat > MIN_ANOMALY_SATURATION)
+            total_pixels     = roi_sat.size
+            if total_pixels == 0:
+                continue
+            if (saturated_pixels / total_pixels) < MIN_SATURATED_PIXEL_FRACTION:
+                self.get_logger().debug(
+                    f"[{cam_name}] Anomaly contour at ({x},{y}) skipped: "
+                    f"low saturation ({saturated_pixels}/{total_pixels} px)"
+                )
+                continue
+
             detections.append((x, y, x + w, y + h, "anomaly"))
 
         return detections
 
     def _merge_detections(self, yolo_detections: list, anomaly_detections: list) -> list:
-
         all_detections = list(yolo_detections)
 
         for a_box in anomaly_detections:
@@ -237,8 +230,6 @@ class LandmarkDetectionNode(Node):
         return all_detections
 
     def _iou(self, box_a: tuple, box_b: tuple) -> float:
-        # computes intersection over union between two bounding boxes
-        # each box is (x1, y1, x2, y2, source)
         ax1, ay1, ax2, ay2 = box_a[:4]
         bx1, by1, bx2, by2 = box_b[:4]
 
@@ -255,10 +246,7 @@ class LandmarkDetectionNode(Node):
         area_b = (bx2 - bx1) * (by2 - by1)
         union  = area_a + area_b - intersection
 
-        if union == 0:
-            return 0.0
-
-        return intersection / union
+        return 0.0 if union == 0 else intersection / union
 
     def _sample_depth(self, depth_frame: np.ndarray, cx: int, cy: int, window: int = 5) -> float:
         h, w = depth_frame.shape[:2]
@@ -273,7 +261,6 @@ class LandmarkDetectionNode(Node):
         return float(np.median(valid))
 
     def _estimate_3d_position(self, cx: int, cy: int, depth_m: float, frame_shape: tuple) -> Point:
-        # rough pinhole estimate
         point = Point()
         if np.isnan(depth_m):
             return point
@@ -288,11 +275,13 @@ class LandmarkDetectionNode(Node):
         point.z = float(depth_m)
         return point
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = LandmarkDetectionNode()
     rclpy.spin(node)
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
